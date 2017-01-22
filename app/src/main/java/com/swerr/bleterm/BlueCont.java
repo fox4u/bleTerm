@@ -4,10 +4,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-
-
-
-
+import java.util.Locale;
+import java.util.UUID;
 
 
 import android.annotation.SuppressLint;
@@ -23,6 +21,7 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.InputType;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
@@ -34,16 +33,16 @@ import android.widget.EditText;
 import android.widget.ExpandableListView;
 import android.widget.SimpleExpandableListAdapter;
 import android.widget.TextView;
+import android.widget.Toast;
 
 @SuppressLint("NewApi")
 public class BlueCont extends Activity {
+    private static String LOG_TAG = "BlueCont";
 
 	private String mDeviceName;
 	private String mDeviceAddress;
-	private TextView tvaddress;
 	private TextView tvstate;
 	private EditText tvdata;
-	private ExpandableListView elist;
 	private boolean result;
 	private BluetoothLeService mBluetoothLeService;
 	
@@ -59,9 +58,9 @@ public class BlueCont extends Activity {
 				IBinder service) {
 			mBluetoothLeService = ((BluetoothLeService.LocalBinder) service)
 					.getService();
-			Log.e("a", "初始化蓝牙服务");
+			Log.e(LOG_TAG, "初始化蓝牙服务");
 			if (!mBluetoothLeService.initialize()) {
-				Log.e("a", "无法初始化蓝牙");
+				Log.e(LOG_TAG, "无法初始化蓝牙");
 				finish();
 			}
 			// 自动连接到装置上成功启动初始化。
@@ -88,64 +87,42 @@ public class BlueCont extends Activity {
 		public void onReceive(Context context, Intent intent) {
 			final String action = intent.getAction();
 			if (BluetoothLeService.ACTION_GATT_CONNECTED.equals(action)) {
+                Log.w(LOG_TAG, "ACTION_GATT_CONNECTED");
 				result = true;
-				Log.e("a", "来了广播1");
-				tvstate.setText("连接");
-
+				tvstate.setText(R.string.connected);
+                startRssiUpdate();
 			} else if (BluetoothLeService.ACTION_GATT_DISCONNECTED
 					.equals(action)) {
+                Log.w(LOG_TAG, "ACTION_GATT_DISCONNECTED");
 				result = false;
-				Log.e("a", "来了广播2");
 				mBluetoothLeService.close();
-				tvstate.setText("未连接");
+				tvstate.setText(R.string.disconnected);
 				// clearUI();
 
 			} else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED
 					.equals(action)) {
 				// 显示所有的支持服务的特点和用户界面。
-				Log.e("a", "来了广播3");
-				List<BluetoothGattService> supportedGattServices = mBluetoothLeService
-						.getSupportedGattServices();
-				 displayGattServices(mBluetoothLeService.getSupportedGattServices());
-				for(int i=0;i<supportedGattServices.size();i++){
-					Log.e("a","1:BluetoothGattService UUID=:"+supportedGattServices.get(i).getUuid());
-					List<BluetoothGattCharacteristic> cs = supportedGattServices.get(i).getCharacteristics();
-					for(int j=0;j<cs.size();j++){
-						Log.e("a","2:   BluetoothGattCharacteristic UUID=:"+cs.get(j).getUuid());
-						
-					
-							List<BluetoothGattDescriptor> ds = cs.get(j).getDescriptors();
-							for(int f=0;f<ds.size();f++){
-								Log.e("a","3:      BluetoothGattDescriptor UUID=:"+ds.get(f).getUuid());
-								
-								 byte[] value = ds.get(f).getValue();
-								
-								 Log.e("a","4:     			value=:"+Arrays.toString(value));
-								 Log.e("a","5:     			value=:"+Arrays.toString( ds.get(f).getCharacteristic().getValue()));
-							}
-					}
-				}
+				Log.e(LOG_TAG, "ACTION_GATT_SERVICES_DISCOVERED");
+				displayGattServices(mBluetoothLeService.getSupportedGattServices());
 				
 			} else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
-				Log.e("a", "来了广播4--->data:"+intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
-//				displayData(intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
-				i++;
-				DATA = ""+DATA+"\n第"+i+"条："+intent.getStringExtra(BluetoothLeService.EXTRA_DATA);
-				Log.e("a4", ""+DATA);
-				tvdata.setText(""+DATA);
+                byte[] ba = intent.getByteArrayExtra(BluetoothLeService.EXTRA_DATA);
+                Log.w(LOG_TAG, "ACTION_DATA_AVAILABLE: " + Arrays.toString(ba));
+                String dataStr = new String(ba);
+				DATA = DATA+ dataStr;
+				tvdata.setText(DATA);
 				tvdata.setSelection(DATA.length());
 			}else if(BluetoothLeService.ACTION_RSSI.equals(action)){
-				Log.e("a", "来了广播5");
-				tvrssi.setText("RSSI:"+intent
-						.getStringExtra(BluetoothLeService.ACTION_DATA_RSSI));
+				tvrssi.setText(intent.getStringExtra(BluetoothLeService.ACTION_DATA_RSSI));
 			}
 		}
 	};
     private ExpandableListView mGattServicesList;
 	private EditText et_send;
 	private String DATA;
-	private int i;
 	private ArrayList<BluetoothGattCharacteristic> charas;
+    protected String serv_uuid = "";
+    protected String char_uuid = "";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -155,21 +132,18 @@ public class BlueCont extends Activity {
 
 		Intent intent = getIntent();
 		mDeviceName = intent.getStringExtra("name");
-		mDeviceAddress = intent.getStringExtra("andrass");
+		mDeviceAddress = intent.getStringExtra("address");
+        serv_uuid = intent.getStringExtra("serv_uuid");
+        char_uuid = intent.getStringExtra("char_uuid");
 
-		Log.e("a", "名字"+mDeviceName+"地址"+mDeviceAddress);
 		getActionBar().setTitle(mDeviceName);
 		getActionBar().setDisplayHomeAsUpEnabled(true);
 
 		DATA = "";
-		i = 0;
-		
-		tvaddress = (TextView) findViewById(R.id.device_address);
-		tvaddress.setText(mDeviceAddress);
 
 		tvstate = (TextView) findViewById(R.id.connection_state);
 		tvdata = (EditText) findViewById(R.id.data_value);
-		tvdata.setMovementMethod(ScrollingMovementMethod.getInstance()); 
+		tvdata.setMovementMethod(ScrollingMovementMethod.getInstance());
 		//tvdata.setSelected(true);
 		tvdata.requestFocus();//get the focus
 		tvrssi = (TextView) findViewById(R.id.data_rssi);
@@ -186,41 +160,13 @@ public class BlueCont extends Activity {
 			@Override
 			public void onClick(View arg0) {
 				// TODO Auto-generated method stub
-				byte[]bb= new byte[]{(byte)1,2,3};
 				String sendstr = et_send.getText().toString();
 				Boolean boolean1 = mBluetoothLeService.write(mNotifyCharacteristic,sendstr);
-				Log.e("a", "发送UUID"+mNotifyCharacteristic.getUuid().toString()+"是否发送成功::"+boolean1);
+//				Log.e(LOG_TAG, "发送UUID"+mNotifyCharacteristic.getUuid().toString()+"是否发送成功::"+boolean1);
 			}
 		});
-		
-		 flg = true;
-		Button btrssi=(Button) findViewById(R.id.btrssi);
-		btrssi.setOnClickListener(new OnClickListener() {
-			
-			@Override
-			public void onClick(View arg0) {
-				// TODO Auto-generated method stub
-				
-				new Thread(new Runnable() {
-					
-					@Override
-					public void run() {
-						while (flg) {
-						// TODO Auto-generated method stub
-							try {
-								Thread.sleep(1000);	
-								flg=mBluetoothLeService.readrssi();	
-							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-								Log.e("a","断网了");
-							}
-						}
-					
-					}
-				}).start();
-			}
-		});
+
+
 		registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
 		Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
 		bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
@@ -236,9 +182,8 @@ public class BlueCont extends Activity {
 		 */
 		registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
 		if (mBluetoothLeService != null) {
-			Log.e("a", "来了");
-			result = mBluetoothLeService.connect(mDeviceAddress);
-			Log.e("a", "连接请求的结果=" + result);
+			boolean connRes = mBluetoothLeService.connect(mDeviceAddress);
+			Log.e(LOG_TAG, "connect result=" + connRes);
 
 		}
 	}
@@ -253,33 +198,31 @@ public class BlueCont extends Activity {
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
 		// TODO Auto-generated method stub
-		switch (item.getItemId()) {
-		case R.id.action_settings:
+        switch (item.getItemId()) {
+            case R.id.action_settings:
+            case android.R.id.home:
+                if (result) {
+                    mBluetoothLeService.disconnect();
+                }
+                onBackPressed();
+                break;
+            case R.id.action_cont:
+                if(!result)
+                {
+                    boolean connRes = mBluetoothLeService.connect(mDeviceAddress);
+                }
+                break;
 
-			if (result) {
-				result = false;
-				mBluetoothLeService.disconnect();
-			}
-			onBackPressed();
-			break;
-		case R.id.action_cont:
-			result = mBluetoothLeService.connect(mDeviceAddress);
+            case R.id.action_close:
+                if (result) {
+                    mBluetoothLeService.disconnect();
+                    tvstate.setText(R.string.disconnected);
+                }
 
-			break;
-
-		case R.id.action_close:
-			if (result) {
-				result = false;
-			//	mBluetoothLeService.disconnect();
-				Log.e("a", "断开了");
-				mBluetoothLeService.close();
-				tvstate.setText("连接断开");
-			}
-
-			break;
-		default:
-			break;
-		}
+                break;
+            default:
+                break;
+        }
 		return super.onOptionsItemSelected(item);
 	}
 
@@ -304,79 +247,53 @@ public class BlueCont extends Activity {
 		unbindService(mServiceConnection);
 
 	}
-	
-    // 我们是注定的expandablelistview数据结构
-	//  在UI。
+
     private void displayGattServices(List<BluetoothGattService> gattServices) {
         if (gattServices == null)
-        	return;
+            return;
         String uuid = null;
-        String unknownServiceString = "service_UUID";
-        String unknownCharaString = "characteristic_UUID";
-        ArrayList<HashMap<String, String>> gattServiceData = new ArrayList<HashMap<String, String>>();
-        ArrayList<ArrayList<HashMap<String, String>>> gattCharacteristicData
-                = new ArrayList<ArrayList<HashMap<String, String>>>();
-        mGattCharacteristics = new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
-
+        BluetoothGattCharacteristic characteristic = null;
         // 循环遍历服务
         for (BluetoothGattService gattService : gattServices) {
-            HashMap<String, String> currentServiceData = new HashMap<String, String>();
-            uuid = gattService.getUuid().toString();
-            currentServiceData.put(
-                    "NAME", SampleGattAttributes.lookup(uuid, unknownServiceString));
-            currentServiceData.put("UUID", uuid);
-            gattServiceData.add(currentServiceData);
-
-            ArrayList<HashMap<String, String>> gattCharacteristicGroupData =
-                    new ArrayList<HashMap<String, String>>();
-            List<BluetoothGattCharacteristic> gattCharacteristics =
-                    gattService.getCharacteristics();
-            charas =
-                    new ArrayList<BluetoothGattCharacteristic>();
-
-            // 循环遍历特征
-            for (BluetoothGattCharacteristic gattCharacteristic : gattCharacteristics) {
-                charas.add(gattCharacteristic);
-                HashMap<String, String> currentCharaData = new HashMap<String, String>();
-                uuid = gattCharacteristic.getUuid().toString();
-                currentCharaData.put(
-                        "NAME", SampleGattAttributes.lookup(uuid, unknownCharaString));
-                currentCharaData.put("UUID", uuid);
-                gattCharacteristicGroupData.add(currentCharaData);
+            uuid = gattService.getUuid().toString().toLowerCase(Locale.US);
+            Log.w(LOG_TAG, "service uuid : " + uuid);
+            if(uuid.equals(serv_uuid))
+            {
+                characteristic = gattService.getCharacteristic(UUID.fromString(char_uuid));
             }
-            mGattCharacteristics.add(charas);
-            gattCharacteristicData.add(gattCharacteristicGroupData);
         }
-        
-        final BluetoothGattCharacteristic characteristic = charas.get(charas.size()-1);
-        final int charaProp = characteristic.getProperties();
-        if ((charaProp | BluetoothGattCharacteristic.PROPERTY_READ) > 0) {
-            if (mNotifyCharacteristic != null) {
+
+        if(characteristic != null)
+        {
+            final int charaProp = characteristic.getProperties();
+            if ((charaProp | BluetoothGattCharacteristic.PROPERTY_READ) > 0)
+            {
+                if (mNotifyCharacteristic != null)
+                {
+                    mBluetoothLeService.setCharacteristicNotification(
+                            mNotifyCharacteristic, false);
+                    mNotifyCharacteristic = null;
+                }
+                mBluetoothLeService.readCharacteristic(characteristic);
+
+            }
+            if ((charaProp | BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0)
+            {
+                mNotifyCharacteristic = characteristic;
                 mBluetoothLeService.setCharacteristicNotification(
-                        mNotifyCharacteristic, false);
-                mNotifyCharacteristic = null;
+                        characteristic, true);
             }
-            mBluetoothLeService.readCharacteristic(characteristic);
-
         }
-        if ((charaProp | BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0) {
-            mNotifyCharacteristic = characteristic;
-            mBluetoothLeService.setCharacteristicNotification(
-                    characteristic, true);
-        }
+        else
+        {
+            Log.e(LOG_TAG, "unable to find char_uuid: " + char_uuid);
+            if (result) {
+                mBluetoothLeService.disconnect();
+            }
+            showToastText("unable to find char_uuid");
 
-       /* SimpleExpandableListAdapter gattServiceAdapter = new SimpleExpandableListAdapter(
-                this,
-                gattServiceData,
-                android.R.layout.simple_expandable_list_item_2,
-                new String[] {"NAME", "UUID"},
-                new int[] { android.R.id.text1, android.R.id.text2 },
-                gattCharacteristicData,
-                android.R.layout.simple_expandable_list_item_2,
-                new String[] {"NAME", "UUID"},
-                new int[] { android.R.id.text1, android.R.id.text2 }
-        );
-        mGattServicesList.setAdapter(gattServiceAdapter);*/
+            onBackPressed();
+        }
     }
     
     
@@ -385,7 +302,6 @@ public class BlueCont extends Activity {
                 @Override
                 public boolean onChildClick(ExpandableListView parent, View v, int groupPosition,
                                             int childPosition, long id) {
-                	Log.e("a","点击了");
                     if (mGattCharacteristics != null) {
                         final BluetoothGattCharacteristic characteristic = mGattCharacteristics.get(groupPosition).get(childPosition);
                         final int charaProp = characteristic.getProperties();
@@ -412,9 +328,36 @@ public class BlueCont extends Activity {
 	private boolean flg;
 	private TextView tvrssi;
 
+	private void startRssiUpdate()
+	{
+		flg = true;
+		new Thread(new Runnable() {
+
+			@Override
+			public void run() {
+				while (flg) {
+					// TODO Auto-generated method stub
+					try {
+						Thread.sleep(1000);
+						flg=mBluetoothLeService.readrssi();
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						//e.printStackTrace();
+					}
+				}
+
+			}
+		}).start();
+	}
+
     private void clearUI() {
         mGattServicesList.setAdapter((SimpleExpandableListAdapter) null);
         tvdata.setText("木有数据");
+    }
+
+    private void showToastText(String str)
+    {
+        Toast.makeText(this, str, Toast.LENGTH_SHORT).show();
     }
 
 	/**

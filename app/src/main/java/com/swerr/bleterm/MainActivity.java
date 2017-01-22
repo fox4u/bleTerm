@@ -5,7 +5,10 @@ package com.swerr.bleterm;
 
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -17,6 +20,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.ParcelUuid;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
@@ -31,9 +35,14 @@ import android.widget.Toast;
 
 @SuppressLint("NewApi")
 public class MainActivity extends Activity {
-	    private BluetoothAdapter mBluetoothAdapter;
-	    private boolean mScanning;
-	    private Handler mHandler;
+    private static String LOG_TAG = "MainActivity";
+    private static final String uuid_template = "0000%04x-0000-1000-8000-00805f9b34fb";
+    private static final String addr_uuid_tempplate = "%s -- %04x";
+
+    private BluetoothAdapter mBluetoothAdapter;
+    private boolean mScanning;
+    private Handler mHandler;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -70,7 +79,7 @@ public class MainActivity extends Activity {
 	        btlist = (ListView) findViewById(R.id.list);
 	        listItem = new ArrayList<HashMap<String, Object>>();  
 	        adapter = new SimpleAdapter(this,listItem,android.R.layout.simple_expandable_list_item_2,
-	        new String[]{"name","andrass"},new int[]{android.R.id.text1,android.R.id.text2});
+	        new String[]{"name","addr_uuid"},new int[]{android.R.id.text1,android.R.id.text2});
    	        btlist.setAdapter(adapter);
    	        
    	        
@@ -80,14 +89,19 @@ public class MainActivity extends Activity {
 				public void onItemClick(AdapterView<?> arg0, View arg1,
 						int arg2, long arg3) {
 					// TODO Auto-generated method stub
-					BluetoothDevice device=	(BluetoothDevice) listItem.get(arg2).get("device");
-					Log.e("a", "点击的按钮"+arg2+device.getAddress()+"cacaca");
-				
+                    String address = (String) listItem.get(arg2).get("address");
+                    String name = (String) listItem.get(arg2).get("name");
+                    int uuid = (Integer) listItem.get(arg2).get("uuid");
+                    String serv_uuid = String.format(Locale.US, uuid_template, uuid);
+                    String char_uuid = String.format(Locale.US, uuid_template, uuid + 1);
+                    Log.w(LOG_TAG, "uuid:" + uuid + ", char:" + char_uuid);
+
 					Intent intent=new Intent(getApplicationContext(), BlueCont.class);
 			
-					intent.putExtra("andrass",device.getAddress());
-					intent.putExtra("name",device.getName());
-					
+					intent.putExtra("address",address);
+					intent.putExtra("name",name);
+                    intent.putExtra("serv_uuid",serv_uuid);
+                    intent.putExtra("char_uuid",char_uuid);
 					
 					  if (mScanning) {
 				            mBluetoothAdapter.stopLeScan(mLeScanCallback);
@@ -104,7 +118,7 @@ public class MainActivity extends Activity {
 				public void onClick(View arg0) {
 					// TODO Auto-generated method stub
 					scanLeDevice(true);
-					Log.e("a", "开始搜寻");
+					Log.e(LOG_TAG, "开始搜寻");
 				}
 			});
 	        
@@ -114,7 +128,7 @@ public class MainActivity extends Activity {
 				public void onClick(View arg0) {
 					// TODO Auto-generated method stub
 					scanLeDevice(false);
-					Log.e("a", "停止");
+					Log.e(LOG_TAG, "停止");
 				}
 			});
 	}
@@ -146,10 +160,11 @@ public class MainActivity extends Activity {
 	                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
 	                    invalidateOptionsMenu();
 	                }
-	            }, 10000);
+	            }, 5000);
 	        	bar.setVisibility(View.VISIBLE);
 	            mScanning = true;
 	            mBluetoothAdapter.startLeScan(mLeScanCallback);
+                listItem.clear();
 	        } else {
 				bar.setVisibility(View.GONE);
 	            mScanning = false;
@@ -164,20 +179,11 @@ public class MainActivity extends Activity {
 	            new BluetoothAdapter.LeScanCallback() {
 
 	        @Override
-	        public void onLeScan(final BluetoothDevice device, final int rssi, byte[] scanRecord) {
+	        public void onLeScan(final BluetoothDevice device, final int rssi, final byte[] scanRecord) {
 	            runOnUiThread(new Runnable() {
 	                @Override
 	                public void run() {
-	                	   HashMap<String, Object> map = new HashMap<String, Object>();  
-	                	  	
-	                       Log.e("a", "RSSI=:"+rssi+"");
-	                       
-	                       map.put("name", device.getName());
-	                       map.put("andrass",device.getAddress());  
-	                       map.put("device", device);
-	                       listItem.add(map);
-	                       adapter.notifyDataSetChanged();
-	                    Log.e("a","发现蓝牙"+device.getAddress()+"状态"+device.getBondState()+"type"+device.getType()+device.describeContents());
+                        checkDevice(device, rssi, scanRecord);
 	                }
 	            });
 	        }
@@ -186,6 +192,97 @@ public class MainActivity extends Activity {
 		private ArrayList<HashMap<String, Object>> listItem;
 		private SimpleAdapter adapter;
 		private ProgressBar bar;
+
+    private static String ByteArrayToString(byte[] ba)
+    {
+        StringBuilder hex = new StringBuilder(ba.length * 2);
+        for (byte b : ba)
+            hex.append(b + " ");
+
+        return hex.toString();
+    }
+
+    public static class AdRecord {
+        private int iLength;
+        private int iType;
+        private byte[] rawData;
+        public AdRecord(int length, int type, byte[] data) {
+            iLength = length;
+            iType = type;
+            rawData = data;
+
+            Log.i(LOG_TAG, "Length: " + length + " Type : " + type + " Data : " + ByteArrayToString(data));
+        }
+
+        // ...
+
+        public static List<AdRecord> parseScanRecord(byte[] scanRecord) {
+            List<AdRecord> records = new ArrayList<AdRecord>();
+
+            int index = 0;
+            while (index < scanRecord.length) {
+                int length = scanRecord[index++];
+                //Done once we run out of records
+                if (length == 0) break;
+
+                int type = scanRecord[index];
+                //Done if our record isn't a valid type
+                if (type == 0) break;
+
+                byte[] data = Arrays.copyOfRange(scanRecord, index+1, index+length);
+
+                records.add(new AdRecord(length, type, data));
+                //Advance
+                index += length;
+            }
+
+            return records;
+        }
+
+        public int getUUID()
+        {
+            int ret = -1;
+            if(iType == 2)
+            {
+                ret = ((rawData[0] & 0xFF) | (rawData[1] & 0xFF) << 8) & 0xFFFF;
+            }
+            return ret;
+        }
+    }
+    private void checkDevice(final BluetoothDevice device, final int rssi, byte[] scanRecord)
+    {
+        Log.w(LOG_TAG, "check device:" + device.getName() + ", " + rssi);
+
+        List<AdRecord> records = AdRecord.parseScanRecord(scanRecord);
+        int uuid = -1;
+
+        for(AdRecord rec:records)
+        {
+            uuid = rec.getUUID();
+
+            if(uuid != -1)
+            {
+                break;
+            }
+        }
+
+        if(uuid != -1)
+        {
+            String addr = device.getAddress();
+            String addr_uuid = String.format(Locale.US, addr_uuid_tempplate, addr, uuid);
+
+            HashMap<String, Object> map = new HashMap<String, Object>();
+
+            map.put("name", device.getName());
+            map.put("address",addr);
+            map.put("uuid", uuid);
+            map.put("addr_uuid", addr_uuid);
+
+            listItem.add(map);
+            adapter.notifyDataSetChanged();
+        }
+
+    }
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// 将菜单；这将项目添加到动作条如果真的存在。

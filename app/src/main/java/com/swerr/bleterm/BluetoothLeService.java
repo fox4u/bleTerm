@@ -110,7 +110,7 @@ public class BluetoothLeService extends Service {
                 intentAction = ACTION_GATT_CONNECTED;
                 mConnectionState = STATE_CONNECTED;
                 broadcastUpdate(intentAction);
-                Log.e(TAG, "服务器的连接.");
+//                Log.e(TAG, "服务器的连接.");
                 // 试图发现服务连接成功后。
                 Log.e(TAG, "启动服务发现:" +
                         mBluetoothGatt.discoverServices());
@@ -118,7 +118,7 @@ public class BluetoothLeService extends Service {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 intentAction = ACTION_GATT_DISCONNECTED;
                 mConnectionState = STATE_DISCONNECTED;
-                Log.e(TAG, "服务器断开.");
+//                Log.e(TAG, "服务器断开.");
                 broadcastUpdate(intentAction);
             }
         }
@@ -137,7 +137,7 @@ public class BluetoothLeService extends Service {
         public void onCharacteristicRead(BluetoothGatt gatt,
                                          BluetoothGattCharacteristic characteristic,
                                          int status) {
-        	 Log.i(TAG, "onCharacteristicRead");
+//        	 Log.i(TAG, "onCharacteristicRead");
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 //broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
             }
@@ -147,29 +147,15 @@ public class BluetoothLeService extends Service {
          */
         public void onCharacteristicChanged(BluetoothGatt gatt,
                                             BluetoothGattCharacteristic characteristic) {
-        	 Log.i(TAG, "onCharacteristicChanged");
+//        	 Log.i(TAG, "onCharacteristicChanged");
         	/**
         	 * 正常型号蓝牙接收
         	 */
            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
-        	/**
-        	 * bolutek ------>>> DM-710-A 
-        	 * 格式UInt8
-        	 */
-            /*byte[] data = characteristic.getValue();
-            //鏁版嵁
-            String str2 = new String(data);
-            Log.e(TAG, "返回读出的值:"+characteristic.getValue().toString());
-            Log.e(TAG, "返回读出的值data:"+Arrays.toString(data));
-            Log.e(TAG, "返回读出的值data2:"+str2);
-            
-            Intent intent = new Intent(ACTION_DATA_AVAILABLE);
-            intent.putExtra(EXTRA_DATA, String.valueOf(str2));
-            sendBroadcast(intent);*/
+
         }
         public void onReadRemoteRssi(BluetoothGatt gatt, int rssi, int status) {
         	broadcastUpdate(ACTION_RSSI,rssi+"");
-        	 Log.e("a", "返回读出的值:"+rssi);
         };
     };
     
@@ -192,31 +178,9 @@ public class BluetoothLeService extends Service {
                                  final BluetoothGattCharacteristic characteristic) {
         final Intent intent = new Intent(action);
 
-        //这是心率测量资料特殊处理。数据分析
-        //按型材规格：
-        if (UUID_HEART_RATE_MEASUREMENT.equals(characteristic.getUuid())) {
-            int flag = characteristic.getProperties();
-            int format = -1;
-            if ((flag & 0x01) != 0) {
-                format = BluetoothGattCharacteristic.FORMAT_UINT16;
-                Log.d(TAG, "格式UInt16");
-            } else {
-                format = BluetoothGattCharacteristic.FORMAT_UINT8;
-                Log.d(TAG, "格式UInt8--");
-            }
-            final int heartRate = characteristic.getIntValue(format, 1);
-            Log.d(TAG, String.format("接收的数据: %d", heartRate));
-            intent.putExtra(EXTRA_DATA, String.valueOf(heartRate));
-        } else {
-        	//其他所有的配置文件，将数据格式化为十六进制。
-            final byte[] data = characteristic.getValue();
-            if (data != null && data.length > 0) {
-                final StringBuilder stringBuilder = new StringBuilder(data.length);
-                for(byte byteChar : data)
-                    stringBuilder.append(String.format("%02X ", byteChar));
-                intent.putExtra(EXTRA_DATA, new String(data));// + "\n" + stringBuilder.toString());
-                Log.i(TAG, "onCharacteristicRead:"+new String(data));
-            }
+        final byte[] data = characteristic.getValue();
+        if (data != null && data.length > 0) {
+            intent.putExtra(EXTRA_DATA, data);
         }
         sendBroadcast(intent);
     }
@@ -402,15 +366,27 @@ public class BluetoothLeService extends Service {
     		Log.e(TAG, "characteristic==空");
 			return false;
     	}
-    	 // 这是特定的心脏率测量。
 
-        	Log.e("a", "进来了。、。。。");
+        characteristic.setValue(bb);
 
-        	characteristic.setValue(bb);
-
-            return   mBluetoothGatt.writeCharacteristic(characteristic);
-
+        return mBluetoothGatt.writeCharacteristic(characteristic);
     	
+    }
+
+    public Boolean write(BluetoothGattCharacteristic characteristic, byte[] bb){
+        if(mBluetoothGatt==null){
+            Log.e(TAG, "mBluetoothGatt==空");
+            return false;
+        }
+        if(characteristic==null){
+            Log.e(TAG, "characteristic==空");
+            return false;
+        }
+
+        characteristic.setValue(bb);
+
+        return mBluetoothGatt.writeCharacteristic(characteristic);
+
     }
     
     public boolean readrssi(){
