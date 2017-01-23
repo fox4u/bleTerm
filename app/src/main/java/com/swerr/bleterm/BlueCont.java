@@ -3,8 +3,10 @@ package com.swerr.bleterm;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.StringTokenizer;
 import java.util.UUID;
 
 
@@ -19,8 +21,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.preference.PreferenceManager;
 import android.text.InputType;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
@@ -29,6 +33,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ExpandableListView;
 import android.widget.SimpleExpandableListAdapter;
@@ -38,6 +43,8 @@ import android.widget.Toast;
 @SuppressLint("NewApi")
 public class BlueCont extends Activity {
     private static String LOG_TAG = "BlueCont";
+    private final String PREF_SEND_NEW_LINE = "pref_send_new_line";
+    private final String PREF_SEND_HEX = "pref_send_hex";
 
 	private String mDeviceName;
 	private String mDeviceAddress;
@@ -50,7 +57,6 @@ public class BlueCont extends Activity {
 	
     private ArrayList<ArrayList<BluetoothGattCharacteristic>> mGattCharacteristics =
             new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
-	// 代码管理服务生命周期。
 	private final ServiceConnection mServiceConnection = new ServiceConnection() {
 
 		@Override
@@ -63,7 +69,6 @@ public class BlueCont extends Activity {
 				Log.e(LOG_TAG, "无法初始化蓝牙");
 				finish();
 			}
-			// 自动连接到装置上成功启动初始化。
 			result = mBluetoothLeService.connect(mDeviceAddress);
 			
 			
@@ -76,12 +81,6 @@ public class BlueCont extends Activity {
 		}
 	};
 
-	// 处理各种事件的服务了。
-	// action_gatt_connected连接到服务器：关贸总协定。
-	// action_gatt_disconnected：从关贸总协定的服务器断开。
-	// action_gatt_services_discovered：关贸总协定的服务发现。
-	// action_data_available：从设备接收数据。这可能是由于阅读
-	// 或通知操作。
 	private final BroadcastReceiver mGattUpdateReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
@@ -120,7 +119,6 @@ public class BlueCont extends Activity {
     private ExpandableListView mGattServicesList;
 	private EditText et_send;
 	private String DATA;
-	private ArrayList<BluetoothGattCharacteristic> charas;
     protected String serv_uuid = "";
     protected String char_uuid = "";
 
@@ -144,28 +142,123 @@ public class BlueCont extends Activity {
 		tvstate = (TextView) findViewById(R.id.connection_state);
 		tvdata = (EditText) findViewById(R.id.data_value);
 		tvdata.setMovementMethod(ScrollingMovementMethod.getInstance());
-		//tvdata.setSelected(true);
 		tvdata.requestFocus();//get the focus
 		tvrssi = (TextView) findViewById(R.id.data_rssi);
 
 		
 		mGattServicesList = (ExpandableListView) findViewById(R.id.gatt_services_list);
         mGattServicesList.setOnChildClickListener(servicesListClickListner);
-		
+
+        final CheckBox cbSendNl = (CheckBox) findViewById(R.id.cb_nl);
+        final CheckBox cbSendHex = (CheckBox) findViewById(R.id.cb_hex);
+        try
+        {
+            SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(this);
+            boolean sendNewLine = pref.getBoolean(PREF_SEND_NEW_LINE, false);
+            cbSendNl.setChecked(sendNewLine);
+            cbSendNl.setOnClickListener(new OnClickListener()
+            {
+                @Override
+                public void onClick(View view)
+                {
+                    SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(BlueCont.this).edit();
+                    editor.putBoolean(PREF_SEND_NEW_LINE, cbSendNl.isChecked());
+                    editor.apply();
+                }
+            });
+        }
+        catch(Exception ex)
+        {
+            ex.printStackTrace();
+        }
+
+        try
+        {
+            SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(this);
+            boolean sendHex = pref.getBoolean(PREF_SEND_HEX, false);
+            cbSendHex.setChecked(sendHex);
+            cbSendNl.setEnabled(!sendHex);
+
+            cbSendHex.setOnClickListener(new OnClickListener()
+            {
+                @Override
+                public void onClick(View view)
+                {
+                    SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(BlueCont.this).edit();
+                    boolean sendHex = cbSendHex.isChecked();
+                    editor.putBoolean(PREF_SEND_HEX, sendHex);
+                    editor.apply();
+                    cbSendNl.setEnabled(!sendHex);
+                }
+            });
+        }
+        catch(Exception ex)
+        {
+            ex.printStackTrace();
+        }
+
         et_send = (EditText) findViewById(R.id.et_send);
 		Button btsend = (Button) findViewById(R.id.btsend);
-		
-		btsend.setOnClickListener(new OnClickListener() {
-			
-			@Override
-			public void onClick(View arg0) {
-				// TODO Auto-generated method stub
-				String sendstr = et_send.getText().toString();
-				Boolean boolean1 = mBluetoothLeService.write(mNotifyCharacteristic,sendstr);
-//				Log.e(LOG_TAG, "发送UUID"+mNotifyCharacteristic.getUuid().toString()+"是否发送成功::"+boolean1);
-			}
-		});
 
+        try
+        {
+            btsend.setOnClickListener(new OnClickListener()
+            {
+
+                @Override
+                public void onClick(View arg0)
+                {
+                    // TODO Auto-generated method stub
+                    String sendStr = et_send.getText().toString();
+
+                    if(cbSendHex.isChecked())
+                    {
+                        if(!sendStr.trim().isEmpty())
+                        {
+                            String tokArray[] = sendStr.split("[^\\p{XDigit}]");
+                            LinkedList<Integer> intList = new LinkedList<Integer>();
+                            for(String tok : tokArray)
+                            {
+                                int tokLen = tok.length();
+                                for(int i = 0; i < tokLen; i+=2){
+                                    int intVal;
+                                    if(i + 1 < tokLen)
+                                    {
+                                        intVal = (Character.digit(tok.charAt(i), 16) << 4) + Character.digit(tok.charAt(i+1), 16);
+                                    }
+                                    else
+                                    {
+                                        intVal = Character.digit(tok.charAt(i), 16);
+                                    }
+                                    intList.add(intVal);
+                                }
+                            }
+                            byte[] sendBytes = new byte[intList.size()];
+                            int bPos = 0;
+                            for(Integer intVal : intList)
+                            {
+                                sendBytes[bPos] = (byte)(int)intVal;
+                                bPos ++;
+                            }
+                            mBluetoothLeService.write(mNotifyCharacteristic, sendBytes);
+                        }
+                    }
+                    else
+                    {
+                        if (cbSendNl.isChecked())
+                        {
+                            byte[] nl = {0x0d, 0x0a};
+                            sendStr = sendStr.concat(new String(nl));
+                        }
+                        mBluetoothLeService.write(mNotifyCharacteristic, sendStr);
+                    }
+                }
+            });
+        }
+        catch(Exception ex)
+        {
+            ex.printStackTrace();
+        }
 
 		registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
 		Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);

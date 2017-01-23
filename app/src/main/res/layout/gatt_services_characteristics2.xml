@@ -101,6 +101,26 @@
             android:layout_margin="10dp"
             android:orientation="horizontal" >
 
+            <CheckBox
+                android:text="@string/cb_label_nl"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:id="@+id/cb_nl"
+                android:layout_weight="1"/>
+
+            <CheckBox
+                android:text="@string/cb_label_hex"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:id="@+id/cb_hex"
+                android:layout_weight="1"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" >
+
             <Button
                 android:id="@+id/btsend"
                 android:layout_width="wrap_content"
