@@ -32,5 +32,6 @@
     <string name="menu_connect">Connect</string>
     <string name="menu_disconnect">Disconnect</string>
     <string name="menu_back">Back</string>
+    <string name="menu_dump">Dump BT Info</string>
     
 </resources>

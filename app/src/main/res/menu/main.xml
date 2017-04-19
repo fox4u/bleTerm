@@ -11,10 +11,15 @@
         android:orderInCategory="100"
         app:showAsAction="never"
         android:title="@string/menu_connect"/>
-      <item
+    <item
         android:id="@+id/action_close"
         android:orderInCategory="100"
         app:showAsAction="never"
         android:title="@string/menu_disconnect"/>
+    <item
+        android:id="@+id/action_dump"
+        android:orderInCategory="100"
+        app:showAsAction="never"
+        android:title="@string/menu_dump"/>
 
 </menu>

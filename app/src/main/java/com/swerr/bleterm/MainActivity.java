@@ -92,21 +92,25 @@ public class MainActivity extends Activity {
                     String address = (String) listItem.get(arg2).get("address");
                     String name = (String) listItem.get(arg2).get("name");
                     int uuid = (Integer) listItem.get(arg2).get("uuid");
-                    String serv_uuid = String.format(Locale.US, uuid_template, uuid);
-                    String char_uuid = String.format(Locale.US, uuid_template, uuid + 1);
-                    Log.w(LOG_TAG, "uuid:" + uuid + ", char:" + char_uuid);
 
 					Intent intent=new Intent(getApplicationContext(), BlueCont.class);
 			
 					intent.putExtra("address",address);
 					intent.putExtra("name",name);
-                    intent.putExtra("serv_uuid",serv_uuid);
-                    intent.putExtra("char_uuid",char_uuid);
-					
-					  if (mScanning) {
-				            mBluetoothAdapter.stopLeScan(mLeScanCallback);
-				            mScanning = false;
-				        }
+                    if (uuid != -1)
+                    {
+                        String serv_uuid = String.format(Locale.US, uuid_template, uuid);
+                        String char_uuid = String.format(Locale.US, uuid_template, uuid + 1);
+                        intent.putExtra("serv_uuid",serv_uuid);
+                        intent.putExtra("char_uuid",char_uuid);
+                        Log.w(LOG_TAG, "uuid:" + uuid + ", char:" + char_uuid);
+                    }
+
+                    if (mScanning)
+                    {
+                        mBluetoothAdapter.stopLeScan(mLeScanCallback);
+                        mScanning = false;
+                    }
 
 					startActivity(intent);
 				}
@@ -256,31 +260,36 @@ public class MainActivity extends Activity {
         List<AdRecord> records = AdRecord.parseScanRecord(scanRecord);
         int uuid = -1;
 
-        for(AdRecord rec:records)
+		for(AdRecord rec:records)
+		{
+			uuid = rec.getUUID();
+
+			if(uuid != -1)
+			{
+				break;
+			}
+		}
+
+		String addr = device.getAddress();
+
+		HashMap<String, Object> map = new HashMap<String, Object>();
+
+		map.put("name", device.getName());
+		map.put("address",addr);
+		map.put("uuid", uuid);
+
+		if(uuid != -1)
+		{
+			String addr_uuid = String.format(Locale.US, addr_uuid_tempplate, addr, uuid);
+			map.put("addr_uuid", addr_uuid);
+		}
+		else
         {
-            uuid = rec.getUUID();
+			map.put("addr_uuid", addr);
+		}
 
-            if(uuid != -1)
-            {
-                break;
-            }
-        }
-
-        if(uuid != -1)
-        {
-            String addr = device.getAddress();
-            String addr_uuid = String.format(Locale.US, addr_uuid_tempplate, addr, uuid);
-
-            HashMap<String, Object> map = new HashMap<String, Object>();
-
-            map.put("name", device.getName());
-            map.put("address",addr);
-            map.put("uuid", uuid);
-            map.put("addr_uuid", addr_uuid);
-
-            listItem.add(map);
-            adapter.notifyDataSetChanged();
-        }
+		listItem.add(map);
+		adapter.notifyDataSetChanged();
 
     }
 	@Override

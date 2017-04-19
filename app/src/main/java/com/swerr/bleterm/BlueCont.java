@@ -1,12 +1,12 @@
 package com.swerr.bleterm;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
-import java.util.StringTokenizer;
 import java.util.UUID;
 
 
@@ -23,9 +23,9 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
-import android.text.InputType;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
@@ -102,7 +102,7 @@ public class BlueCont extends Activity {
 					.equals(action)) {
 				// 显示所有的支持服务的特点和用户界面。
 				Log.e(LOG_TAG, "ACTION_GATT_SERVICES_DISCOVERED");
-				displayGattServices(mBluetoothLeService.getSupportedGattServices());
+                searchGattServicesForTerm(mBluetoothLeService.getSupportedGattServices());
 				
 			} else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
                 byte[] ba = intent.getByteArrayExtra(BluetoothLeService.EXTRA_DATA);
@@ -131,8 +131,16 @@ public class BlueCont extends Activity {
 		Intent intent = getIntent();
 		mDeviceName = intent.getStringExtra("name");
 		mDeviceAddress = intent.getStringExtra("address");
-        serv_uuid = intent.getStringExtra("serv_uuid");
-        char_uuid = intent.getStringExtra("char_uuid");
+        String serv_uuid_in = intent.getStringExtra("serv_uuid");
+        if (serv_uuid_in != null)
+        {
+            serv_uuid = serv_uuid_in;
+        }
+        String char_uuid_in = intent.getStringExtra("char_uuid");
+        if (char_uuid_in != null)
+        {
+            char_uuid = char_uuid_in;
+        }
 
 		getActionBar().setTitle(mDeviceName);
 		getActionBar().setDisplayHomeAsUpEnabled(true);
@@ -311,8 +319,21 @@ public class BlueCont extends Activity {
                     mBluetoothLeService.disconnect();
                     tvstate.setText(R.string.disconnected);
                 }
-
                 break;
+            case R.id.action_dump:
+                if (result) {
+                    final String LOG_FILENAME_TEMPLATE = "/Download/BTInfo_%s_%s.txt";
+                    final Long tsLong = System.currentTimeMillis();
+                    String strSrvs= printGattServices(mBluetoothLeService.getSupportedGattServices());
+                    try {
+                        FileOutputStream fo = new FileOutputStream(Environment.getExternalStorageDirectory() + String.format(Locale.US, LOG_FILENAME_TEMPLATE, mDeviceName, tsLong));
+                        fo.write(strSrvs.getBytes());
+                        fo.close();
+                    } catch (IOException e)
+                    {
+                        e.printStackTrace();
+                    }
+                }
             default:
                 break;
         }
@@ -341,7 +362,7 @@ public class BlueCont extends Activity {
 
 	}
 
-    private void displayGattServices(List<BluetoothGattService> gattServices) {
+    private void searchGattServicesForTerm(List<BluetoothGattService> gattServices) {
         if (gattServices == null)
             return;
         String uuid = null;
@@ -380,16 +401,36 @@ public class BlueCont extends Activity {
         else
         {
             Log.e(LOG_TAG, "unable to find char_uuid: " + char_uuid);
-            if (result) {
-                mBluetoothLeService.disconnect();
-            }
-            showToastText("unable to find char_uuid");
 
-            onBackPressed();
+            mNotifyCharacteristic = null;
+
+            showToastText("unable to find char_uuid");
         }
     }
-    
-    
+
+    private String printGattServices(List<BluetoothGattService> supportedGattServices) {
+        String ret = "";
+        for(int i=0;i<supportedGattServices.size();i++){
+            ret = ret + "1:BluetoothGattService UUID=:"+ supportedGattServices.get(i).getUuid() + "\n";
+            List<BluetoothGattCharacteristic> cs = supportedGattServices.get(i).getCharacteristics();
+            for(int j=0;j<cs.size();j++){
+                ret = ret + "2:   BluetoothGattCharacteristic UUID=:"+ cs.get(j).getUuid() + "\n";
+
+                List<BluetoothGattDescriptor> ds = cs.get(j).getDescriptors();
+                for(int f=0;f<ds.size();f++){
+                    ret = ret + "3:      BluetoothGattDescriptor UUID=:"+ ds.get(f).getUuid() + "\n";
+
+                    byte[] value = ds.get(f).getValue();
+
+                    ret = ret + "4:     			value=:"+Arrays.toString(value) + "\n";
+                    ret = ret + "5:     			value=:"+Arrays.toString( ds.get(f).getCharacteristic().getValue()) + "\n";
+                }
+            }
+        }
+
+        return ret;
+    }
+
     private final ExpandableListView.OnChildClickListener servicesListClickListner =
             new ExpandableListView.OnChildClickListener() {
                 @Override
@@ -470,5 +511,4 @@ public class BlueCont extends Activity {
 		intentFilter.addAction(BluetoothLeService.ACTION_DATA_RSSI);
 		return intentFilter;
 	}
-	
 }
